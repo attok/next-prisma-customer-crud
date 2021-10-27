@@ -32,11 +32,6 @@ const Home: NextPage<Props> = ({ initialCustomers }) => {
   const [customers, setCustomers] = useState<Prisma.CustomerUncheckedCreateInput[]>(initialCustomers);
   const [id, setId] = useState<number | null>(null)
 
-  const [firstName, setFirstName] = useState<string>("")
-  const [lastName, setLastName] = useState<string | null>(null)
-  const [email, setEmail] = useState<string>("")
-  const [address, setAddress] = useState<string | null>(null)
-
   interface CustomerInput {
     firstName: string
     lastName?: string | null
