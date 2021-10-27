@@ -1,9 +1,139 @@
+import { Prisma, PrismaClient } from '.prisma/client'
 import type { NextPage } from 'next'
 import Head from 'next/head'
 import Image from 'next/image'
+import Link from 'next/link'
+import { useState } from 'react'
+import { Button, Card, Col, Container, Form, Row } from 'react-bootstrap'
 import styles from '../styles/Home.module.css'
 
-const Home: NextPage = () => {
+import { useForm } from "react-hook-form";
+import { yupResolver } from '@hookform/resolvers/yup';
+import * as yup from "yup";
+
+
+const prisma = new PrismaClient()
+
+
+export async function getServerSideProps() {
+  const customers: Prisma.CustomerUncheckedCreateInput[] = await prisma.customer.findMany()
+
+  return {
+    props: { initialCustomers: customers }
+  }
+}
+interface Props {
+  initialCustomers: Prisma.CustomerUncheckedCreateInput[];
+}
+
+
+const Home: NextPage<Props> = ({ initialCustomers }) => {
+
+  const [customers, setCustomers] = useState<Prisma.CustomerUncheckedCreateInput[]>(initialCustomers);
+  const [id, setId] = useState<number | null>(null)
+
+  const [firstName, setFirstName] = useState<string>("")
+  const [lastName, setLastName] = useState<string | null>(null)
+  const [email, setEmail] = useState<string>("")
+  const [address, setAddress] = useState<string | null>(null)
+
+  interface CustomerInput {
+    firstName: string
+    lastName?: string | null
+    email: string
+    address?: string | null
+  }
+
+
+
+  const schema = yup.object({
+    firstName: yup.string().required(),
+    email: yup.string().email('Must be a valid email').max(255).required('Email is required'),
+  }).required();
+
+  const { register, handleSubmit, formState: { errors }, setValue, reset } = useForm<CustomerInput>({
+    resolver: yupResolver(schema),
+  });
+
+
+
+  const editCustomer = (customer: Prisma.CustomerUncheckedCreateInput) => {
+    customer.id && setId(customer.id)
+
+
+    setValue('firstName', customer.firstName)
+    setValue('lastName', customer.lastName)
+    setValue('email', customer.email)
+    setValue('address', customer.address)
+
+  }
+
+  const deleteCustomer = (customer: Prisma.CustomerUncheckedCreateInput) => {
+    if (confirm("Anda yakin ingin menghapus data ini?")) {
+      fetch("/api/delete/" + customer.id?.toString(), {
+        method: 'DELETE',
+        credentials: "include",
+        headers: {
+          'Content-Type': 'application/json'
+        },
+      }).then(async r => {
+        if (r.status == 200) {
+          const res: { id: number } = await r.json()
+          setCustomers(customers.filter(v => {
+            return v.id != res.id
+          }))
+        } else {
+          alert("somethint went wrong.");
+        }
+      })
+    }
+  }
+
+  const onSubmit = (data: CustomerInput) => {
+
+    let body: Prisma.CustomerCreateInput, url: string;
+
+    if (id === null) {
+      body = data
+      url = "/api/create"
+    } else {
+      body = data
+      url = "/api/update/" + id?.toString()
+    }
+
+
+    fetch(url, {
+      method: 'POST',
+      credentials: "include",
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    }).then(async r => {
+      if (r.status == 200) {
+        if (id === null) {
+          const newCustomer: Prisma.CustomerUncheckedCreateInput = await r.json();
+          setCustomers([...customers, newCustomer])
+        } else {
+          const updatedCustomer: Prisma.CustomerUncheckedCreateInput = await r.json();
+          setCustomers(customers.map((value) => {
+            if (value.id === updatedCustomer.id) {
+              value = updatedCustomer
+            }
+
+            return value
+          }))
+        }
+
+        setId(null)
+        reset()
+      } else {
+        alert("somethint went wrong.");
+      }
+    })
+  }
+
+
   return (
     <div className={styles.container}>
       <Head>
@@ -13,58 +143,66 @@ const Home: NextPage = () => {
       </Head>
 
       <main className={styles.main}>
-        <h1 className={styles.title}>
-          Welcome to <a href="https://nextjs.org">Next.js!</a>
-        </h1>
 
-        <p className={styles.description}>
-          Get started by editing{' '}
-          <code className={styles.code}>pages/index.js</code>
-        </p>
+        <Container>
+          <h2>{id ? "Edit" : "Tambah"} Customer</h2>
+          <Form onSubmit={handleSubmit(onSubmit)}>
+            <Row>
+              <Col>
+                <Form.Group className="mb-3" controlId="fieldFirstName">
+                  <Form.Label>First Name</Form.Label>
+                  <Form.Control type="text" placeholder="Your First Name" isInvalid={typeof errors.firstName !== 'undefined'} {...register("firstName")} />
+                  {errors.firstName && <Form.Control.Feedback type="invalid">{errors.firstName.message}</Form.Control.Feedback>}
+                </Form.Group>
+              </Col>
+              <Col>
+                <Form.Group className="mb-3" controlId="fieldLastName">
+                  <Form.Label>Last Name</Form.Label>
+                  <Form.Control type="text" placeholder="Your Last Name" {...register("lastName")} />
+                </Form.Group>
+              </Col>
+            </Row>
 
-        <div className={styles.grid}>
-          <a href="https://nextjs.org/docs" className={styles.card}>
-            <h2>Documentation &rarr;</h2>
-            <p>Find in-depth information about Next.js features and API.</p>
-          </a>
+            <Form.Group className="mb-3" controlId="fieldEmail">
+              <Form.Label>Your Email</Form.Label>
+              <Form.Control type="email" placeholder="Your Email" isInvalid={typeof errors.email !== 'undefined'} {...register("email")} />
+              {errors.email && <Form.Control.Feedback type="invalid">{errors.email.message}</Form.Control.Feedback>}
+            </Form.Group>
 
-          <a href="https://nextjs.org/learn" className={styles.card}>
-            <h2>Learn &rarr;</h2>
-            <p>Learn about Next.js in an interactive course with quizzes!</p>
-          </a>
 
-          <a
-            href="https://github.com/vercel/next.js/tree/master/examples"
-            className={styles.card}
-          >
-            <h2>Examples &rarr;</h2>
-            <p>Discover and deploy boilerplate example Next.js projects.</p>
-          </a>
+            <Form.Group className="mb-3" controlId="fieldAddress">
+              <Form.Label>Your Address</Form.Label>
+              <Form.Control as="textarea" rows={3} placeholder="Your Address" {...register("address")} />
+            </Form.Group>
 
-          <a
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-          >
-            <h2>Deploy &rarr;</h2>
-            <p>
-              Instantly deploy your Next.js site to a public URL with Vercel.
-            </p>
-          </a>
-        </div>
+            <Button variant="primary" type="submit">
+              Submit
+            </Button>
+          </Form>
+
+          <hr />
+
+          <h2>Semua Customer</h2>
+
+          {
+            customers && customers.map((customer, index) => {
+              return (<Card key={index} className="mb-3">
+                <Card.Body>
+                  <h4>{customer.firstName + " " + customer.lastName}</h4>
+                  <p>
+                    {customer.email}
+                  </p>
+                  <div>
+                    <Button variant="success" className="me-1" onClick={e => { e.preventDefault(); editCustomer(customer); }}>Edit</Button>
+                    <Button variant="danger" onClick={e => { e.preventDefault(); deleteCustomer(customer) }}>Delete</Button>
+                  </div>
+                </Card.Body>
+              </Card>)
+            })
+          }
+          {customers.length == 0 && 'Tidak ada customer.'}
+        </Container>
       </main>
-
-      <footer className={styles.footer}>
-        <a
-          href="https://vercel.com?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Powered by{' '}
-          <span className={styles.logo}>
-            <Image src="/vercel.svg" alt="Vercel Logo" width={72} height={16} />
-          </span>
-        </a>
-      </footer>
     </div>
   )
 }
